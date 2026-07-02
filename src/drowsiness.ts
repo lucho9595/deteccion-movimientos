@@ -29,33 +29,33 @@ type Thresholds = {
 const THRESHOLDS: Record<DrowsinessSensitivity, Thresholds> = {
   low: {
     eyeClosedRatio: 0.16,
-    headDropScore: 0.58,
+    headDropScore: 0.44,
     attentionMs: 1400,
     drowsyMs: 2600,
     alertMs: 4300,
     missingAlertMs: 6000,
     riseMs: 260,
-    fallMs: 120,
+    fallMs: 180,
   },
   medium: {
     eyeClosedRatio: 0.18,
-    headDropScore: 0.54,
+    headDropScore: 0.38,
     attentionMs: 1000,
     drowsyMs: 2100,
     alertMs: 3300,
     missingAlertMs: 4500,
     riseMs: 340,
-    fallMs: 100,
+    fallMs: 260,
   },
   high: {
     eyeClosedRatio: 0.2,
-    headDropScore: 0.5,
+    headDropScore: 0.32,
     attentionMs: 350,
     drowsyMs: 900,
     alertMs: 1600,
     missingAlertMs: 3200,
     riseMs: 520,
-    fallMs: 80,
+    fallMs: 570,
   },
 };
 
@@ -75,6 +75,7 @@ export class DrowsinessTracker {
   private missingStart: number | null = null;
   private lastUpdate: number | null = null;
   private sleepyMs = 0;
+  private alarmLatched = false;
   private lastSnapshot: DrowsinessSnapshot = EMPTY;
 
   reset(): void {
@@ -82,6 +83,7 @@ export class DrowsinessTracker {
     this.missingStart = null;
     this.lastUpdate = null;
     this.sleepyMs = 0;
+    this.alarmLatched = false;
     this.lastSnapshot = EMPTY;
   }
 
@@ -117,7 +119,11 @@ export class DrowsinessTracker {
 
     if (sleepySignal) {
       this.closedStart ??= now;
-      this.sleepyMs = Math.min(thresholds.alertMs + 1000, this.sleepyMs + deltaMs + thresholds.riseMs);
+      const headDropBoost = headDropped ? thresholds.riseMs : 0;
+      this.sleepyMs = Math.min(
+        thresholds.alertMs + 1000,
+        this.sleepyMs + deltaMs + thresholds.riseMs + headDropBoost,
+      );
     } else {
       this.closedStart = null;
       this.sleepyMs = Math.max(0, this.sleepyMs - deltaMs - thresholds.fallMs);
@@ -125,6 +131,11 @@ export class DrowsinessTracker {
 
     const closedMs = Math.max(this.closedStart === null ? 0 : now - this.closedStart, this.sleepyMs);
     const level = getLevel(this.sleepyMs, thresholds);
+    if (level === "Alerta") {
+      this.alarmLatched = true;
+    } else if (!sleepySignal && this.sleepyMs < thresholds.attentionMs) {
+      this.alarmLatched = false;
+    }
 
     this.lastSnapshot = {
       level,
@@ -134,7 +145,7 @@ export class DrowsinessTracker {
       missingFaceMs: 0,
       headDropScore,
       headDropped,
-      alarm: level === "Alerta",
+      alarm: this.alarmLatched,
     };
 
     return this.lastSnapshot;

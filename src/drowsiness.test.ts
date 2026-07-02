@@ -55,4 +55,18 @@ describe("drowsiness tracker", () => {
     expect(snapshot.level).toBe("Alerta");
     expect(snapshot.alarm).toBe(true);
   });
+
+  it("keeps the alarm active until the face is awake and stable again", () => {
+    const tracker = new DrowsinessTracker();
+    const sleepyFace = makeFace({ headDropped: true });
+    const awakeFace = makeFace();
+
+    tracker.update(0, sleepyFace, "high");
+    tracker.update(120, sleepyFace, "high");
+    tracker.update(240, sleepyFace, "high");
+
+    expect(tracker.update(360, awakeFace, "high").alarm).toBe(true);
+    expect(tracker.update(720, awakeFace, "high").alarm).toBe(true);
+    expect(tracker.update(1080, awakeFace, "high").alarm).toBe(false);
+  });
 });

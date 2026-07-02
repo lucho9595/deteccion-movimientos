@@ -201,7 +201,7 @@ let lastSystemMove = 0;
 let lastSystemClick = 0;
 let systemMouseStatus = "Mouse: inactivo";
 let alarmSilencedUntil = 0;
-let lastAlarmBeep = 0;
+let lastAlarmBeep = -Infinity;
 
 const fpsMeter = new FpsMeter();
 const commandGate = new CommandGate();
