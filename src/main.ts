@@ -16,6 +16,14 @@ import {
   type DrowsinessSensitivity,
   type DrowsinessSnapshot,
 } from "./drowsiness";
+import {
+  createFaceProfile,
+  findFaceMatch,
+  loadFaceProfiles,
+  saveFaceProfiles,
+  type FaceMatch,
+  type FaceProfile,
+} from "./face-id";
 import { detectHandGesture } from "./gestures";
 import { MotionGame, RockPaperScissorsGame, type RpsDifficulty } from "./game";
 import {
@@ -91,6 +99,22 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
         <div class="object-list" data-object-list></div>
       </section>
 
+      <section class="analysis-panel face-id-panel" aria-label="Face ID">
+        <h2>Face ID</h2>
+        <div class="name-grid">
+          <label class="field">
+            <span>Nombre</span>
+            <input type="text" data-face-first-name placeholder="Nombre" autocomplete="given-name" />
+          </label>
+          <label class="field">
+            <span>Apellido</span>
+            <input type="text" data-face-last-name placeholder="Apellido" autocomplete="family-name" />
+          </label>
+        </div>
+        <button class="icon-action" type="button" data-register-face>Registrar cara</button>
+        <strong class="face-id-status" data-face-id-status>Sin registros</strong>
+      </section>
+
       <section class="analysis-panel" aria-label="Analisis corporal">
         <h2>Analisis corporal</h2>
         <div class="metric-grid">
@@ -155,6 +179,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
     </aside>
 
     <div class="hand-cursor" data-hand-cursor></div>
+    <div class="welcome-banner" data-welcome-banner>Bienvenido</div>
     <div class="sleep-alert" data-sleep-alert>ALERTA: posible somnolencia</div>
   </main>
 `;
@@ -186,6 +211,11 @@ const sleepAlert = document.querySelector<HTMLDivElement>("[data-sleep-alert]")!
 const handCursor = document.querySelector<HTMLDivElement>("[data-hand-cursor]")!;
 const objectSummaryNode = document.querySelector<HTMLElement>("[data-object-summary]")!;
 const objectListNode = document.querySelector<HTMLDivElement>("[data-object-list]")!;
+const faceFirstNameInput = document.querySelector<HTMLInputElement>("[data-face-first-name]")!;
+const faceLastNameInput = document.querySelector<HTMLInputElement>("[data-face-last-name]")!;
+const registerFaceButton = document.querySelector<HTMLButtonElement>("[data-register-face]")!;
+const faceIdStatusNode = document.querySelector<HTMLElement>("[data-face-id-status]")!;
+const welcomeBanner = document.querySelector<HTMLDivElement>("[data-welcome-banner]")!;
 const metricNodes = {
   leftElbow: document.querySelector<HTMLElement>('[data-metric="leftElbow"]')!,
   rightElbow: document.querySelector<HTMLElement>('[data-metric="rightElbow"]')!,
@@ -225,6 +255,10 @@ let smoothedFaces: NormalizedLandmark[][] = [];
 let smoothedPoses: NormalizedLandmark[][] = [];
 let bodyAnalysis: BodyAnalysis = EMPTY_ANALYSIS;
 let lastGesture = "Sin gesto";
+let faceProfiles: FaceProfile[] = loadFaceProfiles();
+let currentFaceMatch: FaceMatch | null = null;
+let lastWelcomeName = "";
+let welcomeVisibleUntil = 0;
 let alarmSilencedUntil = 0;
 let lastAlarmBeep = -Infinity;
 
@@ -233,6 +267,8 @@ const commandGate = new CommandGate();
 const motionGame = new MotionGame();
 const rpsGame = new RockPaperScissorsGame();
 const drowsinessTracker = new DrowsinessTracker();
+
+renderFaceId(0);
 
 document.querySelectorAll<HTMLInputElement>("[data-toggle]").forEach((input) => {
   input.addEventListener("change", () => {
@@ -276,6 +312,32 @@ cameraButton.addEventListener("click", () => {
 });
 
 captureButton.addEventListener("click", captureFrame);
+
+registerFaceButton.addEventListener("click", () => {
+  setDetectorToggle("face", true);
+  const profile = createFaceProfile(
+    smoothedFaces[0] ?? lastFaces[0] ?? [],
+    faceFirstNameInput.value,
+    faceLastNameInput.value,
+  );
+
+  if (!profile) {
+    faceIdStatusNode.textContent = "Completa nombre/apellido y mostra la cara";
+    return;
+  }
+
+  const fullName = `${profile.firstName} ${profile.lastName}`.toLowerCase();
+  faceProfiles = [
+    ...faceProfiles.filter(
+      (item) => `${item.firstName} ${item.lastName}`.toLowerCase() !== fullName,
+    ),
+    profile,
+  ];
+  saveFaceProfiles(faceProfiles);
+  faceIdStatusNode.textContent = `Registrado: ${profile.firstName} ${profile.lastName}`;
+  faceFirstNameInput.value = "";
+  faceLastNameInput.value = "";
+});
 
 gameModeInput.addEventListener("change", () => {
   if (gameModeInput.checked) {
@@ -426,6 +488,7 @@ function detectLoop(now: number): void {
 
   drawOverlay();
   updateAnalysisState();
+  updateFaceId(now);
   updateDrowsiness(now);
   updateHandCursor(now);
   runGestureCommands(now);
@@ -518,6 +581,20 @@ function updateStats(now: number): void {
   gestureNode.textContent = getGestureHudText();
   renderBodyAnalysis(bodyAnalysis);
   renderObjects();
+  renderFaceId(now);
+}
+
+function updateFaceId(now: number): void {
+  currentFaceMatch = findFaceMatch(smoothedFaces[0], faceProfiles);
+  if (!currentFaceMatch) {
+    return;
+  }
+
+  const fullName = `${currentFaceMatch.profile.firstName} ${currentFaceMatch.profile.lastName}`;
+  if (fullName !== lastWelcomeName || now > welcomeVisibleUntil) {
+    lastWelcomeName = fullName;
+    welcomeVisibleUntil = now + 3800;
+  }
 }
 
 function getGestureHudText(): string {
@@ -645,6 +722,27 @@ function renderObjects(): void {
       `,
     )
     .join("");
+}
+
+function renderFaceId(now: number): void {
+  if (faceProfiles.length === 0) {
+    faceIdStatusNode.textContent = "Sin registros";
+  } else if (currentFaceMatch) {
+    const { profile, distance } = currentFaceMatch;
+    faceIdStatusNode.textContent =
+      `Reconocido: ${profile.firstName} ${profile.lastName} (${Math.round((1 - distance) * 100)}%)`;
+  } else if (toggles.face && cameraActive) {
+    faceIdStatusNode.textContent = `Buscando rostro registrado (${faceProfiles.length})`;
+  } else {
+    faceIdStatusNode.textContent = `${faceProfiles.length} registro(s)`;
+  }
+
+  if (now <= welcomeVisibleUntil && lastWelcomeName) {
+    welcomeBanner.textContent = `Bienvenido, ${lastWelcomeName}`;
+    welcomeBanner.classList.add("is-visible");
+  } else {
+    welcomeBanner.classList.remove("is-visible");
+  }
 }
 
 function toObjectBox(detection: {
@@ -784,8 +882,12 @@ function resetDetections(): void {
   poseCountNode.textContent = "0";
   objectCountNode.textContent = "0";
   gestureNode.textContent = "Sin gesto";
+  currentFaceMatch = null;
+  lastWelcomeName = "";
+  welcomeVisibleUntil = 0;
   renderBodyAnalysis(EMPTY_ANALYSIS);
   renderObjects();
+  renderFaceId(0);
 }
 
 function updateCanvasSize(): void {

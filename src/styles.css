@@ -191,6 +191,16 @@ h1 {
   background: #ffffff;
 }
 
+.field input {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid #d9e2e1;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #172026;
+  background: #ffffff;
+}
+
 .toggle-grid label {
   display: flex;
   align-items: center;
@@ -303,6 +313,22 @@ h1 {
   font-weight: 800;
 }
 
+.face-id-panel {
+  border-color: #d6dcff;
+  background: #f8f9ff;
+}
+
+.name-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.face-id-status {
+  color: #3440a8;
+  font-size: 13px;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -355,6 +381,29 @@ h1 {
 .hand-cursor.is-pinching {
   background: rgba(255, 207, 86, 0.9);
   box-shadow: 0 0 0 12px rgba(255, 207, 86, 0.22);
+}
+
+.welcome-banner {
+  position: fixed;
+  z-index: 11;
+  top: 82px;
+  left: 50%;
+  display: none;
+  width: min(560px, calc(100vw - 32px));
+  padding: 16px 18px;
+  border: 2px solid rgba(255, 255, 255, 0.82);
+  border-radius: 8px;
+  color: #ffffff;
+  background: #3440a8;
+  box-shadow: 0 18px 60px rgba(52, 64, 168, 0.28);
+  font-size: 22px;
+  font-weight: 900;
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+.welcome-banner.is-visible {
+  display: block;
 }
 
 .drowsiness-panel {
