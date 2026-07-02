@@ -1,6 +1,6 @@
 import "./styles.css";
 import { EMPTY_ANALYSIS, analyzeBody, toCanvasPoint, type BodyAnalysis } from "./analysis";
-import { CommandGate, commandFromGesture, isIndexPointer, isPinching } from "./commands";
+import { CommandGate, commandFromGesture, isPinching } from "./commands";
 import {
   POSE_CONNECTIONS,
   clearCanvas,
@@ -110,11 +110,6 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
       </label>
 
       <label class="switch-row">
-        <input type="checkbox" data-system-mouse />
-        <span>Mouse Windows</span>
-      </label>
-
-      <label class="switch-row">
         <input type="checkbox" data-drowsiness-mode />
         <span>Modo somnolencia</span>
       </label>
@@ -165,7 +160,6 @@ const deviceSelect = document.querySelector<HTMLSelectElement>("[data-device]")!
 const onlyHandsInput = document.querySelector<HTMLInputElement>("[data-only-hands]")!;
 const gallery = document.querySelector<HTMLDivElement>("[data-gallery]")!;
 const gameModeInput = document.querySelector<HTMLInputElement>("[data-game-mode]")!;
-const systemMouseInput = document.querySelector<HTMLInputElement>("[data-system-mouse]")!;
 const drowsinessModeInput = document.querySelector<HTMLInputElement>("[data-drowsiness-mode]")!;
 const drowsinessSensitivitySelect = document.querySelector<HTMLSelectElement>("[data-drowsiness-sensitivity]")!;
 const silenceAlarmButton = document.querySelector<HTMLButtonElement>("[data-silence-alarm]")!;
@@ -212,10 +206,6 @@ let smoothedFaces: NormalizedLandmark[][] = [];
 let smoothedPoses: NormalizedLandmark[][] = [];
 let bodyAnalysis: BodyAnalysis = EMPTY_ANALYSIS;
 let lastGesture = "Sin gesto";
-let lastPointerY: number | undefined;
-let lastSystemMove = 0;
-let lastSystemClick = 0;
-let systemMouseStatus = "Mouse: inactivo";
 let alarmSilencedUntil = 0;
 let lastAlarmBeep = -Infinity;
 
@@ -277,17 +267,6 @@ gameModeInput.addEventListener("change", () => {
   }
 });
 
-systemMouseInput.addEventListener("change", () => {
-  if (systemMouseInput.checked) {
-    setDetectorToggle("hands", true);
-    systemMouseStatus = "Mouse: verificando puente";
-    void checkMouseBridge();
-  } else {
-    lastPointerY = undefined;
-    systemMouseStatus = "Mouse: inactivo";
-  }
-});
-
 drowsinessModeInput.addEventListener("change", () => {
   if (drowsinessModeInput.checked) {
     setDetectorToggle("face", true);
@@ -303,17 +282,6 @@ drowsinessModeInput.addEventListener("change", () => {
 silenceAlarmButton.addEventListener("click", () => {
   alarmSilencedUntil = performance.now() + 30_000;
 });
-
-async function checkMouseBridge(): Promise<void> {
-  try {
-    const response = await fetch("http://127.0.0.1:5194/api/health");
-    systemMouseStatus = response.ok
-      ? "Mouse: listo"
-      : "Mouse: ejecuta iniciar-mouse-windows.bat";
-  } catch {
-    systemMouseStatus = "Mouse: ejecuta iniciar-mouse-windows.bat";
-  }
-}
 
 async function startCamera(): Promise<void> {
   const mode = getMode();
@@ -428,64 +396,10 @@ function detectLoop(now: number): void {
   updateAnalysisState();
   updateDrowsiness(now);
   updateHandCursor(now);
-  void updateSystemMouse(now);
   runGestureCommands(now);
   updateStats(now);
   frameIndex += 1;
   animationFrame = requestAnimationFrame(detectLoop);
-}
-
-async function updateSystemMouse(now: number): Promise<void> {
-  const hand = getMouseHand();
-
-  if (!systemMouseInput.checked || !hand) {
-    lastPointerY = undefined;
-    if (systemMouseInput.checked) {
-      systemMouseStatus = "Mouse: mostra la mano";
-    }
-    return;
-  }
-
-  const indexTip = hand[8];
-  const x = Math.round((1 - indexTip.x) * window.screen.width);
-  const y = Math.round(indexTip.y * window.screen.height);
-
-  if (now - lastSystemMove > 45) {
-    lastSystemMove = now;
-    await sendMouseCommand("/api/mouse/move", { x, y });
-  }
-
-  const dropped = lastPointerY !== undefined && y - lastPointerY > 0.024;
-  lastPointerY = y;
-
-  if (dropped && now - lastSystemClick > 650) {
-    lastSystemClick = now;
-    await sendMouseCommand("/api/mouse/click", {});
-    systemMouseStatus = "Mouse: click izquierdo";
-  } else {
-    systemMouseStatus = "Mouse: moviendo cursor";
-  }
-}
-
-async function sendMouseCommand(path: string, body: Record<string, number>): Promise<void> {
-  try {
-    const response = await fetch(`http://127.0.0.1:5194${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      systemMouseStatus = "Mouse: puente local no activo";
-    }
-  } catch {
-    systemMouseStatus = "Mouse: abrir servidor con puente";
-  }
-}
-
-function getMouseHand(): NormalizedLandmark[] | undefined {
-  const pointerHand = smoothedHands.find((hand) => isIndexPointer(hand));
-  return pointerHand ?? getActiveHand();
 }
 
 function drawOverlay(): void {
@@ -563,9 +477,7 @@ function updateStats(now: number): void {
   faceCountNode.textContent = String(toggles.face ? lastFaces.length : 0);
   poseCountNode.textContent = String(toggles.pose ? lastPoses.length : 0);
   objectCountNode.textContent = String(toggles.objects ? lastObjects.length : 0);
-  gestureNode.textContent = systemMouseInput.checked
-    ? systemMouseStatus
-    : gameModeInput.checked
+  gestureNode.textContent = gameModeInput.checked
     ? `${lastGesture} | ${motionGame.snapshot.score} pts`
     : lastGesture;
   renderBodyAnalysis(bodyAnalysis);

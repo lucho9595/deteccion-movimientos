@@ -13,7 +13,7 @@ App de vision por computadora en tiempo real. Detecta manos, cara, cuerpo, objet
 - Modo juego con objetivos verdes, peligros rojos, puntos y vidas.
 - Gestos basicos para capturar, confirmar y controlar acciones.
 - Cursor visual tipo Minority Report dentro de la app.
-- Mouse real de Windows mediante script Python.
+- Mouse virtual nativo mediante script Python.
 - Captura de imagen desde la camara.
 - Modos de rendimiento: rapido, balanceado y preciso.
 
@@ -122,16 +122,6 @@ Controles:
 - Pinza indice + pulgar: click izquierdo.
 - `ESPACIO`: pausar o reanudar.
 - `Q`: salir.
-
-## Mouse Windows desde la app
-
-La app tambien incluye un switch `Mouse Windows`. Para usarlo hay que iniciar el puente local:
-
-```text
-iniciar-mouse-windows.bat
-```
-
-Luego activar `Mouse Windows` en la app.
 
 ## Scripts utiles
 
