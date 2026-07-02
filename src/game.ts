@@ -153,10 +153,22 @@ export type RpsSnapshot = {
   aiMove: RpsMove | "No mostro";
   result: string;
   nextRoundAt: number;
-  phase: "countdown" | "reveal";
+  phase: "countdown" | "reveal" | "matchOver";
+  matchWinner: "player" | "ai" | null;
 };
 
 const MOVES: RpsMove[] = ["Piedra", "Papel", "Tijera"];
+const WINNING_SCORE = 2;
+
+type ConfettiPiece = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  color: string;
+  rotation: number;
+};
 
 export class RockPaperScissorsGame {
   private playerScoreValue = 0;
@@ -164,11 +176,14 @@ export class RockPaperScissorsGame {
   private roundValue = 1;
   private resolveAtValue = 3000;
   private revealUntilValue = 0;
-  private phaseValue: "countdown" | "reveal" = "countdown";
+  private phaseValue: "countdown" | "reveal" | "matchOver" = "countdown";
   private lastPlayerMove: RpsMove | "No mostro" = "No mostro";
   private lastAiMove: RpsMove | "No mostro" = "No mostro";
   private resultValue = "Preparate para mostrar tu jugada";
   private playerHistory: RpsMove[] = [];
+  private matchWinnerValue: "player" | "ai" | null = null;
+  private matchOverUntilValue = 0;
+  private confetti: ConfettiPiece[] = [];
 
   get snapshot(): RpsSnapshot {
     return {
@@ -181,6 +196,7 @@ export class RockPaperScissorsGame {
       result: this.resultValue,
       nextRoundAt: this.resolveAtValue,
       phase: this.phaseValue,
+      matchWinner: this.matchWinnerValue,
     };
   }
 
@@ -195,9 +211,20 @@ export class RockPaperScissorsGame {
     this.lastAiMove = "No mostro";
     this.resultValue = "Preparate para mostrar tu jugada";
     this.playerHistory = [];
+    this.matchWinnerValue = null;
+    this.matchOverUntilValue = 0;
+    this.confetti = [];
   }
 
   update(now: number, gesture: HandGesture, difficulty: RpsDifficulty): void {
+    if (this.phaseValue === "matchOver") {
+      this.updateConfetti();
+      if (now >= this.matchOverUntilValue) {
+        this.reset(now);
+      }
+      return;
+    }
+
     if (this.phaseValue === "reveal") {
       if (now >= this.revealUntilValue) {
         this.roundValue += 1;
@@ -239,6 +266,19 @@ export class RockPaperScissorsGame {
     }
 
     this.phaseValue = "reveal";
+    if (this.playerScoreValue >= WINNING_SCORE || this.aiScoreValue >= WINNING_SCORE) {
+      this.matchWinnerValue = this.playerScoreValue >= WINNING_SCORE ? "player" : "ai";
+      this.phaseValue = "matchOver";
+      this.matchOverUntilValue = now + 4200;
+      this.resultValue = this.matchWinnerValue === "player"
+        ? "Ganaste al mejor de 3"
+        : "Perdiste... la IA se esta riendo de vos jajaja";
+      if (this.matchWinnerValue === "player") {
+        this.spawnConfetti();
+      }
+      return;
+    }
+
     this.revealUntilValue = now + 1800;
   }
 
@@ -256,6 +296,27 @@ export class RockPaperScissorsGame {
     ctx.fillStyle = "#ffffff";
     ctx.font = "900 20px Inter, system-ui, sans-serif";
     ctx.fillText(`Piedra papel tijera | Ronda ${this.roundValue}`, panelX + 16, panelY + 22);
+
+    if (this.phaseValue === "matchOver") {
+      if (this.matchWinnerValue === "player") {
+        this.drawConfetti(ctx);
+      }
+
+      ctx.fillStyle = this.matchWinnerValue === "player" ? "#56f39a" : "#ff6b6b";
+      ctx.font = "900 40px Inter, system-ui, sans-serif";
+      ctx.fillText(this.matchWinnerValue === "player" ? "GANASTE" : "PERDISTE", panelX + 16, panelY + 76);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "900 20px Inter, system-ui, sans-serif";
+      ctx.fillText(`Final ${this.playerScoreValue} - ${this.aiScoreValue}`, panelX + 16, panelY + 112);
+
+      ctx.fillStyle = this.matchWinnerValue === "player" ? "#ffcf56" : "#ffb4b4";
+      ctx.font = "800 17px Inter, system-ui, sans-serif";
+      ctx.fillText(this.resultValue, panelX + 16, panelY + 146);
+      ctx.fillText("Nueva partida en unos segundos", panelX + 16, panelY + 170);
+      ctx.restore();
+      return;
+    }
 
     if (this.phaseValue === "countdown") {
       const waitMs = Math.max(0, this.resolveAtValue - now);
@@ -290,6 +351,44 @@ export class RockPaperScissorsGame {
     ctx.fillStyle = "#56f39a";
     ctx.fillText(this.resultValue, panelX + 160, panelY + 150);
     ctx.restore();
+  }
+
+  private spawnConfetti(): void {
+    const colors = ["#ffcf56", "#56f39a", "#4dabf7", "#ff6b6b", "#ffffff"];
+    this.confetti = Array.from({ length: 90 }, () => ({
+      x: Math.random(),
+      y: -0.1 - Math.random() * 0.6,
+      vx: -0.006 + Math.random() * 0.012,
+      vy: 0.012 + Math.random() * 0.026,
+      size: 6 + Math.random() * 9,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rotation: Math.random() * Math.PI,
+    }));
+  }
+
+  private updateConfetti(): void {
+    for (const piece of this.confetti) {
+      piece.x += piece.vx;
+      piece.y += piece.vy;
+      piece.vy += 0.0008;
+      piece.rotation += 0.18;
+      if (piece.y > 1.12) {
+        piece.y = -0.12;
+        piece.x = Math.random();
+        piece.vy = 0.012 + Math.random() * 0.02;
+      }
+    }
+  }
+
+  private drawConfetti(ctx: CanvasRenderingContext2D): void {
+    for (const piece of this.confetti) {
+      ctx.save();
+      ctx.translate(piece.x * ctx.canvas.width, piece.y * ctx.canvas.height);
+      ctx.rotate(piece.rotation);
+      ctx.fillStyle = piece.color;
+      ctx.fillRect(-piece.size / 2, -piece.size / 2, piece.size, piece.size * 0.55);
+      ctx.restore();
+    }
   }
 
   private chooseAiMove(difficulty: RpsDifficulty): RpsMove {

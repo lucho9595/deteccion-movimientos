@@ -117,12 +117,15 @@ En `Atrapar y esquivar`:
 
 En `Piedra papel tijera`:
 
+- La partida es al mejor de 3: gana quien llegue primero a 2 rondas.
 - `Puno`: piedra.
 - `Mano abierta`: papel.
 - `Tijera`: tijera.
 - La ronda muestra un conteo grande de 3 a 1 antes de revelar jugadas.
 - Si no se muestra una jugada valida, se pierde esa ronda.
 - La IA siempre muestra su eleccion en pantalla.
+- Si ganas aparece confeti de celebracion.
+- Si perdes, la IA se burla de vos.
 - Dificultad `Facil`: juega casi al azar.
 - Dificultad `Medio`: mezcla azar con lectura de patrones.
 - Dificultad `Dificil`: intenta responder contra tu patron reciente.
