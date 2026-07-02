@@ -206,6 +206,7 @@ let lastHands: NormalizedLandmark[][] = [];
 let lastFaces: NormalizedLandmark[][] = [];
 let lastPoses: NormalizedLandmark[][] = [];
 let lastObjects: ObjectBox[] = [];
+let objectScanCount = 0;
 let smoothedHands: NormalizedLandmark[][] = [];
 let smoothedFaces: NormalizedLandmark[][] = [];
 let smoothedPoses: NormalizedLandmark[][] = [];
@@ -420,6 +421,7 @@ function detectLoop(now: number): void {
 
   if (requested.objects) {
     lastObjects = (result.objects?.detections ?? []).map(toObjectBox);
+    objectScanCount += 1;
   }
 
   drawOverlay();
@@ -663,7 +665,9 @@ function renderBodyAnalysis(analysis: BodyAnalysis): void {
 
 function renderObjects(): void {
   if (!toggles.objects || lastObjects.length === 0) {
-    objectSummaryNode.textContent = "Sin objetos";
+    objectSummaryNode.textContent = toggles.objects && cameraActive && objectScanCount > 0
+      ? "Buscando objetos..."
+      : "Sin objetos";
     objectListNode.innerHTML = "";
     return;
   }
@@ -808,6 +812,7 @@ function resetDetections(): void {
   lastFaces = [];
   lastPoses = [];
   lastObjects = [];
+  objectScanCount = 0;
   smoothedHands = [];
   smoothedFaces = [];
   smoothedPoses = [];

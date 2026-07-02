@@ -94,11 +94,11 @@ async function createRuntimeWithDelegate(
     ObjectDetector.createFromOptions(fileset, {
       baseOptions: {
         modelAssetPath: MODELS.object,
-        delegate,
+        delegate: "CPU",
       },
       runningMode: "VIDEO",
-      maxResults: 6,
-      scoreThreshold: Math.max(0.35, preset.minConfidence - 0.18),
+      maxResults: 10,
+      scoreThreshold: 0.18,
     }),
   ]);
 
