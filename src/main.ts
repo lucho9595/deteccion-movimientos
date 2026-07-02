@@ -9,6 +9,11 @@ import {
   drawMirroredLandmarkSet,
   type NormalizedLandmark,
 } from "./drawing";
+import {
+  DrowsinessTracker,
+  type DrowsinessSensitivity,
+  type DrowsinessSnapshot,
+} from "./drowsiness";
 import { detectHandGesture } from "./gestures";
 import { MotionGame } from "./game";
 import {
@@ -99,10 +104,36 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
         <span>Mouse Windows</span>
       </label>
 
+      <label class="switch-row">
+        <input type="checkbox" data-drowsiness-mode />
+        <span>Modo somnolencia</span>
+      </label>
+
+      <label class="field">
+        <span>Sensibilidad sueño</span>
+        <select data-drowsiness-sensitivity>
+          <option value="low">Baja</option>
+          <option value="medium" selected>Media</option>
+          <option value="high">Alta</option>
+        </select>
+      </label>
+
+      <section class="analysis-panel drowsiness-panel" aria-label="Modo somnolencia">
+        <h2>Somnolencia</h2>
+        <div class="metric-grid">
+          <span>Estado</span><strong data-drowsiness="level">Despierto</strong>
+          <span>Ojos</span><strong data-drowsiness="eyes">--</strong>
+          <span>Ojos cerrados</span><strong data-drowsiness="closed">0.0s</strong>
+          <span>Cabeceo</span><strong data-drowsiness="head">--</strong>
+        </div>
+        <button class="icon-action" type="button" data-silence-alarm>Silenciar</button>
+      </section>
+
       <div class="gallery" data-gallery aria-label="Capturas"></div>
     </aside>
 
     <div class="hand-cursor" data-hand-cursor></div>
+    <div class="sleep-alert" data-sleep-alert>ALERTA: posible somnolencia</div>
   </main>
 `;
 
@@ -124,6 +155,10 @@ const onlyHandsInput = document.querySelector<HTMLInputElement>("[data-only-hand
 const gallery = document.querySelector<HTMLDivElement>("[data-gallery]")!;
 const gameModeInput = document.querySelector<HTMLInputElement>("[data-game-mode]")!;
 const systemMouseInput = document.querySelector<HTMLInputElement>("[data-system-mouse]")!;
+const drowsinessModeInput = document.querySelector<HTMLInputElement>("[data-drowsiness-mode]")!;
+const drowsinessSensitivitySelect = document.querySelector<HTMLSelectElement>("[data-drowsiness-sensitivity]")!;
+const silenceAlarmButton = document.querySelector<HTMLButtonElement>("[data-silence-alarm]")!;
+const sleepAlert = document.querySelector<HTMLDivElement>("[data-sleep-alert]")!;
 const handCursor = document.querySelector<HTMLDivElement>("[data-hand-cursor]")!;
 const metricNodes = {
   leftElbow: document.querySelector<HTMLElement>('[data-metric="leftElbow"]')!,
@@ -133,6 +168,12 @@ const metricNodes = {
   shoulders: document.querySelector<HTMLElement>('[data-metric="shoulders"]')!,
   headTilt: document.querySelector<HTMLElement>('[data-metric="headTilt"]')!,
   handAperture: document.querySelector<HTMLElement>('[data-metric="handAperture"]')!,
+};
+const drowsinessNodes = {
+  level: document.querySelector<HTMLElement>('[data-drowsiness="level"]')!,
+  eyes: document.querySelector<HTMLElement>('[data-drowsiness="eyes"]')!,
+  closed: document.querySelector<HTMLElement>('[data-drowsiness="closed"]')!,
+  head: document.querySelector<HTMLElement>('[data-drowsiness="head"]')!,
 };
 
 const toggles: DetectorToggles = {
@@ -159,10 +200,13 @@ let lastPointerY: number | undefined;
 let lastSystemMove = 0;
 let lastSystemClick = 0;
 let systemMouseStatus = "Mouse: inactivo";
+let alarmSilencedUntil = 0;
+let lastAlarmBeep = 0;
 
 const fpsMeter = new FpsMeter();
 const commandGate = new CommandGate();
 const motionGame = new MotionGame();
+const drowsinessTracker = new DrowsinessTracker();
 
 document.querySelectorAll<HTMLInputElement>("[data-toggle]").forEach((input) => {
   input.addEventListener("change", () => {
@@ -224,6 +268,21 @@ systemMouseInput.addEventListener("change", () => {
     lastPointerY = undefined;
     systemMouseStatus = "Mouse: inactivo";
   }
+});
+
+drowsinessModeInput.addEventListener("change", () => {
+  if (drowsinessModeInput.checked) {
+    setDetectorToggle("face", true);
+    drowsinessTracker.reset();
+  } else {
+    drowsinessTracker.reset();
+    renderDrowsiness(drowsinessTracker.snapshot);
+    document.body.classList.remove("is-sleep-alert");
+  }
+});
+
+silenceAlarmButton.addEventListener("click", () => {
+  alarmSilencedUntil = performance.now() + 30_000;
 });
 
 async function checkMouseBridge(): Promise<void> {
@@ -342,6 +401,7 @@ function detectLoop(now: number): void {
 
   drawOverlay();
   updateAnalysisState();
+  updateDrowsiness(now);
   updateHandCursor(now);
   void updateSystemMouse(now);
   runGestureCommands(now);
@@ -439,6 +499,27 @@ function drawOverlay(): void {
       toCanvasPoint(smoothedPoses[0]?.[0], canvas.width, canvas.height);
     motionGame.update(performance.now(), { width: canvas.width, height: canvas.height }, handPoint ?? undefined, headPoint ?? undefined);
     motionGame.draw(ctx);
+  }
+}
+
+function updateDrowsiness(now: number): void {
+  if (!drowsinessModeInput.checked) {
+    return;
+  }
+
+  const snapshot = drowsinessTracker.update(
+    now,
+    smoothedFaces[0],
+    drowsinessSensitivitySelect.value as DrowsinessSensitivity,
+  );
+  renderDrowsiness(snapshot);
+
+  const alarmActive = snapshot.alarm && now > alarmSilencedUntil;
+  document.body.classList.toggle("is-sleep-alert", alarmActive);
+
+  if (alarmActive && now - lastAlarmBeep > 1400) {
+    lastAlarmBeep = now;
+    playAlarmBeep();
   }
 }
 
@@ -546,6 +627,42 @@ function renderBodyAnalysis(analysis: BodyAnalysis): void {
   metricNodes.headTilt.textContent = formatDegrees(analysis.headTilt);
   metricNodes.handAperture.textContent =
     analysis.handAperture === null ? "--" : `${analysis.handAperture}%`;
+}
+
+function renderDrowsiness(snapshot: DrowsinessSnapshot): void {
+  drowsinessNodes.level.textContent = snapshot.level;
+  drowsinessNodes.eyes.textContent = snapshot.eyeRatio === null
+    ? "--"
+    : snapshot.eyesClosed
+      ? "Cerrados"
+      : "Abiertos";
+  drowsinessNodes.closed.textContent = `${(snapshot.closedMs / 1000).toFixed(1)}s`;
+  drowsinessNodes.head.textContent = snapshot.headDropScore === null
+    ? "--"
+    : snapshot.headDropped
+      ? "Cabeceo"
+      : "Estable";
+  sleepAlert.classList.toggle("is-visible", snapshot.alarm && performance.now() > alarmSilencedUntil);
+}
+
+function playAlarmBeep(): void {
+  const AudioContextClass =
+    window.AudioContext ??
+    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextClass) {
+    return;
+  }
+
+  const context = new AudioContextClass();
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = "sine";
+  oscillator.frequency.value = 880;
+  gain.gain.value = 0.08;
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start();
+  oscillator.stop(context.currentTime + 0.18);
 }
 
 function formatDegrees(value: number | null): string {
