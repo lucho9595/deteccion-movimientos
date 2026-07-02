@@ -153,6 +153,7 @@ export type RpsSnapshot = {
   aiMove: RpsMove | "No mostro";
   result: string;
   nextRoundAt: number;
+  phase: "countdown" | "reveal";
 };
 
 const MOVES: RpsMove[] = ["Piedra", "Papel", "Tijera"];
@@ -161,10 +162,12 @@ export class RockPaperScissorsGame {
   private playerScoreValue = 0;
   private aiScoreValue = 0;
   private roundValue = 1;
-  private nextRoundAtValue = 0;
+  private resolveAtValue = 3000;
+  private revealUntilValue = 0;
+  private phaseValue: "countdown" | "reveal" = "countdown";
   private lastPlayerMove: RpsMove | "No mostro" = "No mostro";
   private lastAiMove: RpsMove | "No mostro" = "No mostro";
-  private resultValue = "Mostra piedra, papel o tijera";
+  private resultValue = "Preparate para mostrar tu jugada";
   private playerHistory: RpsMove[] = [];
 
   get snapshot(): RpsSnapshot {
@@ -176,7 +179,8 @@ export class RockPaperScissorsGame {
       playerMove: this.lastPlayerMove,
       aiMove: this.lastAiMove,
       result: this.resultValue,
-      nextRoundAt: this.nextRoundAtValue,
+      nextRoundAt: this.resolveAtValue,
+      phase: this.phaseValue,
     };
   }
 
@@ -184,15 +188,27 @@ export class RockPaperScissorsGame {
     this.playerScoreValue = 0;
     this.aiScoreValue = 0;
     this.roundValue = 1;
-    this.nextRoundAtValue = now;
+    this.resolveAtValue = now + 3000;
+    this.revealUntilValue = 0;
+    this.phaseValue = "countdown";
     this.lastPlayerMove = "No mostro";
     this.lastAiMove = "No mostro";
-    this.resultValue = "Mostra piedra, papel o tijera";
+    this.resultValue = "Preparate para mostrar tu jugada";
     this.playerHistory = [];
   }
 
   update(now: number, gesture: HandGesture, difficulty: RpsDifficulty): void {
-    if (now < this.nextRoundAtValue) {
+    if (this.phaseValue === "reveal") {
+      if (now >= this.revealUntilValue) {
+        this.roundValue += 1;
+        this.resolveAtValue = now + 3000;
+        this.phaseValue = "countdown";
+        this.resultValue = "Preparate para mostrar tu jugada";
+      }
+      return;
+    }
+
+    if (now < this.resolveAtValue) {
       return;
     }
 
@@ -222,37 +238,57 @@ export class RockPaperScissorsGame {
       }
     }
 
-    this.roundValue += 1;
-    this.nextRoundAtValue = now + 1800;
+    this.phaseValue = "reveal";
+    this.revealUntilValue = now + 1800;
   }
 
   draw(ctx: CanvasRenderingContext2D, now: number): void {
-    const waitMs = Math.max(0, this.nextRoundAtValue - now);
-    const countdown = waitMs > 0 ? `${Math.ceil(waitMs / 1000)}` : "YA";
     const panelWidth = Math.min(520, ctx.canvas.width - 32);
-    const panelX = 16;
-    const panelY = ctx.canvas.height - 176;
+    const panelX = Math.max(16, (ctx.canvas.width - panelWidth) / 2);
+    const panelY = Math.max(16, ctx.canvas.height - 208);
 
     ctx.save();
     ctx.fillStyle = "rgba(10, 18, 24, 0.76)";
     ctx.beginPath();
-    ctx.roundRect(panelX, panelY, panelWidth, 150, 10);
+    ctx.roundRect(panelX, panelY, panelWidth, 182, 10);
     ctx.fill();
 
     ctx.fillStyle = "#ffffff";
     ctx.font = "900 20px Inter, system-ui, sans-serif";
     ctx.fillText(`Piedra papel tijera | Ronda ${this.roundValue}`, panelX + 16, panelY + 22);
 
-    ctx.font = "800 17px Inter, system-ui, sans-serif";
-    ctx.fillText(`Deci: ${this.snapshot.prompt} (${countdown})`, panelX + 16, panelY + 52);
+    if (this.phaseValue === "countdown") {
+      const waitMs = Math.max(0, this.resolveAtValue - now);
+      const countdown = Math.max(1, Math.ceil(waitMs / 1000));
+      ctx.fillStyle = "#ffcf56";
+      ctx.font = "900 92px Inter, system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(`${countdown}`, panelX + panelWidth / 2, panelY + 112);
 
-    ctx.font = "800 15px Inter, system-ui, sans-serif";
-    ctx.fillText(`Vos: ${this.lastPlayerMove}`, panelX + 16, panelY + 84);
-    ctx.fillText(`IA: ${this.lastAiMove}`, panelX + 220, panelY + 84);
-    ctx.fillText(`${this.playerScoreValue} - ${this.aiScoreValue}`, panelX + 16, panelY + 114);
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "800 18px Inter, system-ui, sans-serif";
+      ctx.fillText(this.snapshot.prompt, panelX + 16, panelY + 146);
+      ctx.fillText("Mostra piedra, papel o tijera al llegar a 1", panelX + 16, panelY + 168);
+      ctx.restore();
+      return;
+    }
+
+    ctx.font = "900 24px Inter, system-ui, sans-serif";
+    ctx.fillText(`Vos: ${this.lastPlayerMove}`, panelX + 16, panelY + 64);
+    ctx.fillText(`IA: ${this.lastAiMove}`, panelX + 260, panelY + 64);
+
+    ctx.font = "900 42px Inter, system-ui, sans-serif";
+    ctx.fillStyle = "#ffcf56";
+    ctx.fillText(symbolForMove(this.lastPlayerMove), panelX + 16, panelY + 118);
+    ctx.fillText(symbolForMove(this.lastAiMove), panelX + 260, panelY + 118);
+
+    ctx.font = "800 17px Inter, system-ui, sans-serif";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(`Marcador ${this.playerScoreValue} - ${this.aiScoreValue}`, panelX + 16, panelY + 150);
 
     ctx.fillStyle = "#56f39a";
-    ctx.fillText(this.resultValue, panelX + 90, panelY + 114);
+    ctx.fillText(this.resultValue, panelX + 160, panelY + 150);
     ctx.restore();
   }
 
@@ -285,11 +321,27 @@ export function gestureToRpsMove(gesture: HandGesture): RpsMove | null {
     return "Papel";
   }
 
-  if (gesture === "Paz") {
+  if (gesture === "Tijera" || gesture === "Paz") {
     return "Tijera";
   }
 
   return null;
+}
+
+function symbolForMove(move: RpsMove | "No mostro"): string {
+  if (move === "Piedra") {
+    return "Piedra";
+  }
+
+  if (move === "Papel") {
+    return "Papel";
+  }
+
+  if (move === "Tijera") {
+    return "Tijera";
+  }
+
+  return "Trampa";
 }
 
 function compareMoves(player: RpsMove, ai: RpsMove): -1 | 0 | 1 {

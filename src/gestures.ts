@@ -4,6 +4,7 @@ export type HandGesture =
   | "Mano abierta"
   | "Puno"
   | "Pulgar arriba"
+  | "Tijera"
   | "Paz"
   | "Detectando";
 
@@ -17,15 +18,26 @@ export function detectHandGesture(landmarks: NormalizedLandmark[]): HandGesture 
   }
 
   const wrist = landmarks[0];
+  const palmSize = Math.max(0.001, distance(landmarks[0], landmarks[9]));
   const extended = FINGER_TIPS.map((tip, index) => {
     const pip = FINGER_PIPS[index];
     const mcp = FINGER_MCPS[index];
     const tipReach = distance(landmarks[tip], wrist);
     const pipReach = distance(landmarks[pip], wrist);
     const mcpReach = distance(landmarks[mcp], wrist);
-    return landmarks[tip].y < landmarks[pip].y || tipReach > Math.max(pipReach, mcpReach) * 1.12;
+    const pointsAwayFromPalm = tipReach > Math.max(pipReach, mcpReach) * 1.08;
+    const verticalOpen = landmarks[tip].y < landmarks[pip].y - palmSize * 0.08;
+    return pointsAwayFromPalm || verticalOpen;
   });
   const extendedCount = extended.filter(Boolean).length;
+  const foldedCount = FINGER_TIPS.filter((tip, index) => {
+    const pip = FINGER_PIPS[index];
+    const mcp = FINGER_MCPS[index];
+    return (
+      distance(landmarks[tip], landmarks[mcp]) < palmSize * 1.05 ||
+      distance(landmarks[tip], wrist) < distance(landmarks[pip], wrist) * 1.08
+    );
+  }).length;
   const thumbUp =
     landmarks[4].y < landmarks[3].y &&
     landmarks[4].y < landmarks[2].y &&
@@ -40,10 +52,10 @@ export function detectHandGesture(landmarks: NormalizedLandmark[]): HandGesture 
   }
 
   if (extended[0] && extended[1] && !extended[2] && !extended[3]) {
-    return "Paz";
+    return "Tijera";
   }
 
-  if (extendedCount === 0) {
+  if (extendedCount === 0 || foldedCount >= 3) {
     return "Puno";
   }
 

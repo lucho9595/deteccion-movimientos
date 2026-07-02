@@ -37,6 +37,7 @@ export function commandFromGesture(
       return "start";
     case "Pulgar arriba":
       return "confirm";
+    case "Tijera":
     case "Paz":
       return "capture";
     default:

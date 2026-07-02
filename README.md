@@ -119,7 +119,8 @@ En `Piedra papel tijera`:
 
 - `Puno`: piedra.
 - `Mano abierta`: papel.
-- `Paz`: tijera.
+- `Tijera`: tijera.
+- La ronda muestra un conteo grande de 3 a 1 antes de revelar jugadas.
 - Si no se muestra una jugada valida, se pierde esa ronda.
 - La IA siempre muestra su eleccion en pantalla.
 - Dificultad `Facil`: juega casi al azar.
