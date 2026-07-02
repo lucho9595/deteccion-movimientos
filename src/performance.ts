@@ -7,6 +7,7 @@ export type ModePreset = {
   handEvery: number;
   faceEvery: number;
   poseEvery: number;
+  objectEvery: number;
   smoothing: number;
   minConfidence: number;
   camera: {
@@ -22,6 +23,7 @@ export const MODE_PRESETS: Record<AppMode, ModePreset> = {
     handEvery: 1,
     faceEvery: 3,
     poseEvery: 5,
+    objectEvery: 8,
     smoothing: 0.35,
     minConfidence: 0.45,
     camera: { width: 960, height: 540, frameRate: 30 },
@@ -31,6 +33,7 @@ export const MODE_PRESETS: Record<AppMode, ModePreset> = {
     handEvery: 1,
     faceEvery: 2,
     poseEvery: 4,
+    objectEvery: 6,
     smoothing: 0.5,
     minConfidence: 0.58,
     camera: { width: 1280, height: 720, frameRate: 30 },
@@ -40,6 +43,7 @@ export const MODE_PRESETS: Record<AppMode, ModePreset> = {
     handEvery: 1,
     faceEvery: 1,
     poseEvery: 2,
+    objectEvery: 4,
     smoothing: 0.68,
     minConfidence: 0.7,
     camera: { width: 1280, height: 720, frameRate: 30 },
@@ -50,16 +54,18 @@ export type DetectorSchedule = {
   hands: boolean;
   face: boolean;
   pose: boolean;
+  objects: boolean;
 };
 
 export function shouldRunDetectors(
   frame: number,
-  preset: Pick<ModePreset, "handEvery" | "faceEvery" | "poseEvery">,
+  preset: Pick<ModePreset, "handEvery" | "faceEvery" | "poseEvery" | "objectEvery">,
 ): DetectorSchedule {
   return {
     hands: frame % preset.handEvery === 0,
     face: frame % preset.faceEvery === 0,
     pose: frame % preset.poseEvery === 0,
+    objects: frame % preset.objectEvery === 0,
   };
 }
 

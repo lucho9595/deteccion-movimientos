@@ -2,9 +2,11 @@ import {
   FaceLandmarker,
   FilesetResolver,
   HandLandmarker,
+  ObjectDetector,
   PoseLandmarker,
   type FaceLandmarkerResult,
   type HandLandmarkerResult,
+  type ObjectDetectorResult,
   type PoseLandmarkerResult,
 } from "@mediapipe/tasks-vision";
 import type { ModePreset } from "./performance";
@@ -13,6 +15,7 @@ export type DetectorToggles = {
   hands: boolean;
   face: boolean;
   pose: boolean;
+  objects: boolean;
 };
 
 export type DetectorRunRequest = DetectorToggles;
@@ -21,6 +24,7 @@ export type DetectionFrame = {
   hands?: HandLandmarkerResult;
   face?: FaceLandmarkerResult;
   pose?: PoseLandmarkerResult;
+  objects?: ObjectDetectorResult;
 };
 
 export type VisionRuntime = {
@@ -36,6 +40,7 @@ const MODELS = {
   hand: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
   face: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task",
   pose: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
+  object: "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite",
 };
 
 export async function createVisionRuntime(preset: ModePreset): Promise<VisionRuntime> {
@@ -54,7 +59,7 @@ async function createRuntimeWithDelegate(
   delegate: DelegateMode,
   preset: ModePreset,
 ): Promise<VisionRuntime> {
-  const [handLandmarker, faceLandmarker, poseLandmarker] = await Promise.all([
+  const [handLandmarker, faceLandmarker, poseLandmarker, objectDetector] = await Promise.all([
     HandLandmarker.createFromOptions(fileset, {
       baseOptions: {
         modelAssetPath: MODELS.hand,
@@ -86,6 +91,15 @@ async function createRuntimeWithDelegate(
       minPosePresenceConfidence: Math.max(0.45, preset.minConfidence - 0.1),
       minTrackingConfidence: Math.max(0.45, preset.minConfidence - 0.1),
     }),
+    ObjectDetector.createFromOptions(fileset, {
+      baseOptions: {
+        modelAssetPath: MODELS.object,
+        delegate,
+      },
+      runningMode: "VIDEO",
+      maxResults: 6,
+      scoreThreshold: Math.max(0.35, preset.minConfidence - 0.18),
+    }),
   ]);
 
   return {
@@ -102,12 +116,16 @@ async function createRuntimeWithDelegate(
         pose: toggles.pose
           ? poseLandmarker.detectForVideo(video, now)
           : undefined,
+        objects: toggles.objects
+          ? objectDetector.detectForVideo(video, now)
+          : undefined,
       };
     },
     close() {
       handLandmarker.close();
       faceLandmarker.close();
       poseLandmarker.close();
+      objectDetector.close();
     },
   };
 }

@@ -10,6 +10,17 @@ export type Point = {
   y: number;
 };
 
+export type ObjectBox = {
+  label: string;
+  score: number;
+  boundingBox?: {
+    originX: number;
+    originY: number;
+    width: number;
+    height: number;
+  };
+};
+
 export const HAND_CONNECTIONS: Array<[number, number]> = [
   [0, 1],
   [1, 2],
@@ -242,6 +253,55 @@ export function drawFaceMesh(
     pointRadius: 1.2,
     lineWidth: 2,
   });
+}
+
+export function drawObjectBoxes(
+  ctx: CanvasRenderingContext2D,
+  objects: ObjectBox[],
+  sourceSize: { width: number; height: number },
+): void {
+  if (sourceSize.width === 0 || sourceSize.height === 0) {
+    return;
+  }
+
+  const scaleX = ctx.canvas.width / sourceSize.width;
+  const scaleY = ctx.canvas.height / sourceSize.height;
+
+  ctx.save();
+  ctx.lineWidth = 3;
+  ctx.font = "800 15px Inter, system-ui, sans-serif";
+  ctx.textBaseline = "top";
+
+  for (const object of objects) {
+    if (!object.boundingBox) {
+      continue;
+    }
+
+    const width = object.boundingBox.width * scaleX;
+    const height = object.boundingBox.height * scaleY;
+    const x = ctx.canvas.width - (object.boundingBox.originX * scaleX) - width;
+    const y = object.boundingBox.originY * scaleY;
+    const label = `${object.label} ${Math.round(object.score * 100)}%`;
+    const labelWidth = Math.min(ctx.measureText(label).width + 18, ctx.canvas.width - 8);
+    const labelY = Math.max(4, y - 30);
+
+    ctx.strokeStyle = "#21c55d";
+    ctx.fillStyle = "rgba(33, 197, 93, 0.16)";
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(9, 24, 18, 0.88)";
+    ctx.beginPath();
+    ctx.roundRect(Math.max(4, x), labelY, labelWidth, 24, 6);
+    ctx.fill();
+
+    ctx.fillStyle = "#eafff1";
+    ctx.fillText(label, Math.max(12, x + 9), labelY + 4, labelWidth - 14);
+  }
+
+  ctx.restore();
 }
 
 function isVisible(

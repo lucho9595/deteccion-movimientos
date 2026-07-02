@@ -7,7 +7,9 @@ import {
   drawColoredHand,
   drawFaceMesh,
   drawMirroredLandmarkSet,
+  drawObjectBoxes,
   type NormalizedLandmark,
+  type ObjectBox,
 } from "./drawing";
 import {
   DrowsinessTracker,
@@ -70,6 +72,7 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
         <label><input type="checkbox" data-toggle="hands" checked /> Manos</label>
         <label><input type="checkbox" data-toggle="face" checked /> Cara</label>
         <label><input type="checkbox" data-toggle="pose" checked /> Cuerpo</label>
+        <label><input type="checkbox" data-toggle="objects" checked /> Objetos</label>
         <label><input type="checkbox" data-only-hands /> Solo manos</label>
       </div>
 
@@ -79,7 +82,14 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
         <div><dt>Manos</dt><dd data-count-hands>0</dd></div>
         <div><dt>Caras</dt><dd data-count-faces>0</dd></div>
         <div><dt>Poses</dt><dd data-count-poses>0</dd></div>
+        <div><dt>Objetos</dt><dd data-count-objects>0</dd></div>
       </dl>
+
+      <section class="analysis-panel object-panel" aria-label="Objetos detectados">
+        <h2>Objetos</h2>
+        <strong class="object-summary" data-object-summary>Sin objetos</strong>
+        <div class="object-list" data-object-list></div>
+      </section>
 
       <section class="analysis-panel" aria-label="Analisis corporal">
         <h2>Analisis corporal</h2>
@@ -149,6 +159,7 @@ const fpsCountNode = document.querySelector<HTMLElement>("[data-count-fps]")!;
 const handCountNode = document.querySelector<HTMLElement>("[data-count-hands]")!;
 const faceCountNode = document.querySelector<HTMLElement>("[data-count-faces]")!;
 const poseCountNode = document.querySelector<HTMLElement>("[data-count-poses]")!;
+const objectCountNode = document.querySelector<HTMLElement>("[data-count-objects]")!;
 const modeSelect = document.querySelector<HTMLSelectElement>("[data-mode]")!;
 const deviceSelect = document.querySelector<HTMLSelectElement>("[data-device]")!;
 const onlyHandsInput = document.querySelector<HTMLInputElement>("[data-only-hands]")!;
@@ -160,6 +171,8 @@ const drowsinessSensitivitySelect = document.querySelector<HTMLSelectElement>("[
 const silenceAlarmButton = document.querySelector<HTMLButtonElement>("[data-silence-alarm]")!;
 const sleepAlert = document.querySelector<HTMLDivElement>("[data-sleep-alert]")!;
 const handCursor = document.querySelector<HTMLDivElement>("[data-hand-cursor]")!;
+const objectSummaryNode = document.querySelector<HTMLElement>("[data-object-summary]")!;
+const objectListNode = document.querySelector<HTMLDivElement>("[data-object-list]")!;
 const metricNodes = {
   leftElbow: document.querySelector<HTMLElement>('[data-metric="leftElbow"]')!,
   rightElbow: document.querySelector<HTMLElement>('[data-metric="rightElbow"]')!,
@@ -180,6 +193,7 @@ const toggles: DetectorToggles = {
   hands: true,
   face: true,
   pose: true,
+  objects: true,
 };
 
 let runtime: VisionRuntime | undefined;
@@ -191,6 +205,7 @@ let frameIndex = 0;
 let lastHands: NormalizedLandmark[][] = [];
 let lastFaces: NormalizedLandmark[][] = [];
 let lastPoses: NormalizedLandmark[][] = [];
+let lastObjects: ObjectBox[] = [];
 let smoothedHands: NormalizedLandmark[][] = [];
 let smoothedFaces: NormalizedLandmark[][] = [];
 let smoothedPoses: NormalizedLandmark[][] = [];
@@ -220,9 +235,11 @@ onlyHandsInput.addEventListener("change", () => {
     toggles.hands = true;
     toggles.face = false;
     toggles.pose = false;
+    toggles.objects = false;
     document.querySelector<HTMLInputElement>('[data-toggle="hands"]')!.checked = true;
     document.querySelector<HTMLInputElement>('[data-toggle="face"]')!.checked = false;
     document.querySelector<HTMLInputElement>('[data-toggle="pose"]')!.checked = false;
+    document.querySelector<HTMLInputElement>('[data-toggle="objects"]')!.checked = false;
   }
 });
 
@@ -381,6 +398,7 @@ function detectLoop(now: number): void {
     hands: toggles.hands && schedule.hands,
     face: toggles.face && schedule.face,
     pose: toggles.pose && schedule.pose,
+    objects: toggles.objects && schedule.objects,
   };
 
   const result = runtime.detectFrame(video, requested);
@@ -398,6 +416,10 @@ function detectLoop(now: number): void {
   if (requested.pose) {
     lastPoses = result.pose?.landmarks ?? [];
     smoothedPoses = smoothLandmarkGroups(smoothedPoses, lastPoses, preset.smoothing);
+  }
+
+  if (requested.objects) {
+    lastObjects = (result.objects?.detections ?? []).map(toObjectBox);
   }
 
   drawOverlay();
@@ -493,6 +515,13 @@ function drawOverlay(): void {
     }
   }
 
+  if (toggles.objects) {
+    drawObjectBoxes(ctx, lastObjects, {
+      width: video.videoWidth,
+      height: video.videoHeight,
+    });
+  }
+
   if (gameModeInput.checked) {
     const handPoint = toCanvasPoint(getActiveHand()?.[8], canvas.width, canvas.height);
     const headPoint =
@@ -531,12 +560,14 @@ function updateStats(now: number): void {
   handCountNode.textContent = String(toggles.hands ? lastHands.length : 0);
   faceCountNode.textContent = String(toggles.face ? lastFaces.length : 0);
   poseCountNode.textContent = String(toggles.pose ? lastPoses.length : 0);
+  objectCountNode.textContent = String(toggles.objects ? lastObjects.length : 0);
   gestureNode.textContent = systemMouseInput.checked
     ? systemMouseStatus
     : gameModeInput.checked
     ? `${lastGesture} | ${motionGame.snapshot.score} pts`
     : lastGesture;
   renderBodyAnalysis(bodyAnalysis);
+  renderObjects();
 }
 
 function updateAnalysisState(): void {
@@ -630,6 +661,67 @@ function renderBodyAnalysis(analysis: BodyAnalysis): void {
     analysis.handAperture === null ? "--" : `${analysis.handAperture}%`;
 }
 
+function renderObjects(): void {
+  if (!toggles.objects || lastObjects.length === 0) {
+    objectSummaryNode.textContent = "Sin objetos";
+    objectListNode.innerHTML = "";
+    return;
+  }
+
+  const topObject = lastObjects[0];
+  objectSummaryNode.textContent = `Veo: ${topObject.label}`;
+  objectListNode.innerHTML = lastObjects
+    .map(
+      (object) => `
+        <span>
+          <b>${object.label}</b>
+          <em>${Math.round(object.score * 100)}%</em>
+        </span>
+      `,
+    )
+    .join("");
+}
+
+function toObjectBox(detection: {
+  categories: Array<{ categoryName: string; displayName?: string; score: number }>;
+  boundingBox?: ObjectBox["boundingBox"];
+}): ObjectBox {
+  const category = detection.categories[0];
+
+  return {
+    label: translateObjectLabel(category?.categoryName || category?.displayName || "objeto"),
+    score: category?.score ?? 0,
+    boundingBox: detection.boundingBox,
+  };
+}
+
+function translateObjectLabel(label: string): string {
+  const normalized = label.trim().toLowerCase();
+  const dictionary: Record<string, string> = {
+    person: "Persona",
+    cup: "Mate / taza",
+    bottle: "Botella",
+    "wine glass": "Vaso",
+    bowl: "Bowl",
+    spoon: "Cuchara",
+    fork: "Tenedor",
+    knife: "Cuchillo",
+    cell_phone: "Celular",
+    "cell phone": "Celular",
+    laptop: "Notebook",
+    keyboard: "Teclado",
+    mouse: "Mouse",
+    book: "Libro",
+    chair: "Silla",
+    couch: "Sillon",
+    potted_plant: "Planta",
+    "potted plant": "Planta",
+    remote: "Control remoto",
+  };
+
+  return dictionary[normalized] ?? normalized.replace(/_/g, " ");
+}
+
 function renderDrowsiness(snapshot: DrowsinessSnapshot): void {
   drowsinessNodes.level.textContent = snapshot.level;
   drowsinessNodes.eyes.textContent = snapshot.eyeRatio === null
@@ -715,6 +807,7 @@ function resetDetections(): void {
   lastHands = [];
   lastFaces = [];
   lastPoses = [];
+  lastObjects = [];
   smoothedHands = [];
   smoothedFaces = [];
   smoothedPoses = [];
@@ -723,8 +816,10 @@ function resetDetections(): void {
   handCountNode.textContent = "0";
   faceCountNode.textContent = "0";
   poseCountNode.textContent = "0";
+  objectCountNode.textContent = "0";
   gestureNode.textContent = "Sin gesto";
   renderBodyAnalysis(EMPTY_ANALYSIS);
+  renderObjects();
 }
 
 function updateCanvasSize(): void {

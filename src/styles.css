@@ -264,6 +264,45 @@ h1 {
   font-size: 16px;
 }
 
+.object-panel {
+  border-color: #ccebd8;
+  background: #f7fdf9;
+}
+
+.object-summary {
+  color: #0e6b36;
+  font-size: 15px;
+}
+
+.object-list {
+  display: grid;
+  gap: 8px;
+}
+
+.object-list span {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #d9efe1;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 13px;
+}
+
+.object-list b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.object-list em {
+  color: #52705b;
+  font-style: normal;
+  font-weight: 800;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
