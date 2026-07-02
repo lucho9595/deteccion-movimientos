@@ -11,6 +11,7 @@ App de vision por computadora en tiempo real. Detecta manos, cara, cuerpo, objet
 - Traduccion de objetos comunes al español, incluyendo `cup` como `Mate / taza`.
 - Modo somnolencia con ojos cerrados, cabeceo, sensibilidad configurable y alarma sonora.
 - Modo juego con objetivos verdes, peligros rojos, puntos y vidas.
+- Piedra, papel o tijera contra IA con dificultad facil, medio y dificil.
 - Gestos basicos para capturar, confirmar y controlar acciones.
 - Cursor visual tipo Minority Report dentro de la app.
 - Mouse virtual nativo mediante script Python.
@@ -103,9 +104,27 @@ El panel calcula:
 
 Activar `Modo juego`.
 
+En `Tipo de juego` se puede elegir:
+
+- `Atrapar y esquivar`.
+- `Piedra papel tijera`.
+
+En `Atrapar y esquivar`:
+
 - Atrapar objetivos verdes con la mano.
 - Esquivar peligros rojos con la cabeza.
 - Suma puntos y resta vidas.
+
+En `Piedra papel tijera`:
+
+- `Puno`: piedra.
+- `Mano abierta`: papel.
+- `Paz`: tijera.
+- Si no se muestra una jugada valida, se pierde esa ronda.
+- La IA siempre muestra su eleccion en pantalla.
+- Dificultad `Facil`: juega casi al azar.
+- Dificultad `Medio`: mezcla azar con lectura de patrones.
+- Dificultad `Dificil`: intenta responder contra tu patron reciente.
 
 ## Mouse virtual nativo
 

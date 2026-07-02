@@ -17,7 +17,7 @@ import {
   type DrowsinessSnapshot,
 } from "./drowsiness";
 import { detectHandGesture } from "./gestures";
-import { MotionGame } from "./game";
+import { MotionGame, RockPaperScissorsGame, type RpsDifficulty } from "./game";
 import {
   FpsMeter,
   MODE_PRESETS,
@@ -109,6 +109,23 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
         <span>Modo juego</span>
       </label>
 
+      <label class="field">
+        <span>Tipo de juego</span>
+        <select data-game-type>
+          <option value="motion">Atrapar y esquivar</option>
+          <option value="rps">Piedra papel tijera</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Dificultad IA</span>
+        <select data-rps-difficulty>
+          <option value="easy">Facil</option>
+          <option value="medium" selected>Medio</option>
+          <option value="hard">Dificil</option>
+        </select>
+      </label>
+
       <label class="switch-row">
         <input type="checkbox" data-drowsiness-mode />
         <span>Modo somnolencia</span>
@@ -160,6 +177,8 @@ const deviceSelect = document.querySelector<HTMLSelectElement>("[data-device]")!
 const onlyHandsInput = document.querySelector<HTMLInputElement>("[data-only-hands]")!;
 const gallery = document.querySelector<HTMLDivElement>("[data-gallery]")!;
 const gameModeInput = document.querySelector<HTMLInputElement>("[data-game-mode]")!;
+const gameTypeSelect = document.querySelector<HTMLSelectElement>("[data-game-type]")!;
+const rpsDifficultySelect = document.querySelector<HTMLSelectElement>("[data-rps-difficulty]")!;
 const drowsinessModeInput = document.querySelector<HTMLInputElement>("[data-drowsiness-mode]")!;
 const drowsinessSensitivitySelect = document.querySelector<HTMLSelectElement>("[data-drowsiness-sensitivity]")!;
 const silenceAlarmButton = document.querySelector<HTMLButtonElement>("[data-silence-alarm]")!;
@@ -212,6 +231,7 @@ let lastAlarmBeep = -Infinity;
 const fpsMeter = new FpsMeter();
 const commandGate = new CommandGate();
 const motionGame = new MotionGame();
+const rpsGame = new RockPaperScissorsGame();
 const drowsinessTracker = new DrowsinessTracker();
 
 document.querySelectorAll<HTMLInputElement>("[data-toggle]").forEach((input) => {
@@ -261,9 +281,21 @@ gameModeInput.addEventListener("change", () => {
   if (gameModeInput.checked) {
     setDetectorToggle("hands", true);
     setDetectorToggle("face", true);
-    motionGame.start();
+    if (gameTypeSelect.value === "rps") {
+      rpsGame.reset();
+    } else {
+      motionGame.start();
+    }
   } else {
     motionGame.pause();
+  }
+});
+
+gameTypeSelect.addEventListener("change", () => {
+  motionGame.reset();
+  rpsGame.reset();
+  if (gameModeInput.checked && gameTypeSelect.value === "motion") {
+    motionGame.start();
   }
 });
 
@@ -439,12 +471,18 @@ function drawOverlay(): void {
   }
 
   if (gameModeInput.checked) {
-    const handPoint = toCanvasPoint(getActiveHand()?.[8], canvas.width, canvas.height);
-    const headPoint =
-      toCanvasPoint(smoothedFaces[0]?.[1], canvas.width, canvas.height) ??
-      toCanvasPoint(smoothedPoses[0]?.[0], canvas.width, canvas.height);
-    motionGame.update(performance.now(), { width: canvas.width, height: canvas.height }, handPoint ?? undefined, headPoint ?? undefined);
-    motionGame.draw(ctx);
+    const now = performance.now();
+    if (gameTypeSelect.value === "rps") {
+      rpsGame.update(now, lastGesture as ReturnType<typeof detectHandGesture>, rpsDifficultySelect.value as RpsDifficulty);
+      rpsGame.draw(ctx, now);
+    } else {
+      const handPoint = toCanvasPoint(getActiveHand()?.[8], canvas.width, canvas.height);
+      const headPoint =
+        toCanvasPoint(smoothedFaces[0]?.[1], canvas.width, canvas.height) ??
+        toCanvasPoint(smoothedPoses[0]?.[0], canvas.width, canvas.height);
+      motionGame.update(now, { width: canvas.width, height: canvas.height }, handPoint ?? undefined, headPoint ?? undefined);
+      motionGame.draw(ctx);
+    }
   }
 }
 
@@ -477,11 +515,22 @@ function updateStats(now: number): void {
   faceCountNode.textContent = String(toggles.face ? lastFaces.length : 0);
   poseCountNode.textContent = String(toggles.pose ? lastPoses.length : 0);
   objectCountNode.textContent = String(toggles.objects ? lastObjects.length : 0);
-  gestureNode.textContent = gameModeInput.checked
-    ? `${lastGesture} | ${motionGame.snapshot.score} pts`
-    : lastGesture;
+  gestureNode.textContent = getGestureHudText();
   renderBodyAnalysis(bodyAnalysis);
   renderObjects();
+}
+
+function getGestureHudText(): string {
+  if (!gameModeInput.checked) {
+    return lastGesture;
+  }
+
+  if (gameTypeSelect.value === "rps") {
+    const snapshot = rpsGame.snapshot;
+    return `${lastGesture} | Vos ${snapshot.playerScore} - IA ${snapshot.aiScore}`;
+  }
+
+  return `${lastGesture} | ${motionGame.snapshot.score} pts`;
 }
 
 function updateAnalysisState(): void {
@@ -506,7 +555,7 @@ function runGestureCommands(now: number): void {
     return;
   }
 
-  if (command === "start" && gameModeInput.checked) {
+  if (command === "start" && gameModeInput.checked && gameTypeSelect.value === "motion") {
     motionGame.start();
   }
 
