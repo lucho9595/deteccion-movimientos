@@ -22,6 +22,8 @@ type Thresholds = {
   drowsyMs: number;
   alertMs: number;
   missingAlertMs: number;
+  riseMs: number;
+  fallMs: number;
 };
 
 const THRESHOLDS: Record<DrowsinessSensitivity, Thresholds> = {
@@ -32,6 +34,8 @@ const THRESHOLDS: Record<DrowsinessSensitivity, Thresholds> = {
     drowsyMs: 2600,
     alertMs: 4300,
     missingAlertMs: 6000,
+    riseMs: 260,
+    fallMs: 120,
   },
   medium: {
     eyeClosedRatio: 0.18,
@@ -40,14 +44,18 @@ const THRESHOLDS: Record<DrowsinessSensitivity, Thresholds> = {
     drowsyMs: 2100,
     alertMs: 3300,
     missingAlertMs: 4500,
+    riseMs: 340,
+    fallMs: 100,
   },
   high: {
     eyeClosedRatio: 0.2,
     headDropScore: 0.5,
-    attentionMs: 700,
-    drowsyMs: 1500,
-    alertMs: 2400,
+    attentionMs: 350,
+    drowsyMs: 900,
+    alertMs: 1600,
     missingAlertMs: 3200,
+    riseMs: 520,
+    fallMs: 80,
   },
 };
 
@@ -65,11 +73,15 @@ const EMPTY: DrowsinessSnapshot = {
 export class DrowsinessTracker {
   private closedStart: number | null = null;
   private missingStart: number | null = null;
+  private lastUpdate: number | null = null;
+  private sleepyMs = 0;
   private lastSnapshot: DrowsinessSnapshot = EMPTY;
 
   reset(): void {
     this.closedStart = null;
     this.missingStart = null;
+    this.lastUpdate = null;
+    this.sleepyMs = 0;
     this.lastSnapshot = EMPTY;
   }
 
@@ -79,6 +91,8 @@ export class DrowsinessTracker {
     sensitivity: DrowsinessSensitivity,
   ): DrowsinessSnapshot {
     const thresholds = THRESHOLDS[sensitivity];
+    const deltaMs = this.lastUpdate === null ? 0 : Math.min(250, Math.max(0, now - this.lastUpdate));
+    this.lastUpdate = now;
 
     if (!face || face.length < 468) {
       this.closedStart = null;
@@ -103,12 +117,14 @@ export class DrowsinessTracker {
 
     if (sleepySignal) {
       this.closedStart ??= now;
+      this.sleepyMs = Math.min(thresholds.alertMs + 1000, this.sleepyMs + deltaMs + thresholds.riseMs);
     } else {
       this.closedStart = null;
+      this.sleepyMs = Math.max(0, this.sleepyMs - deltaMs - thresholds.fallMs);
     }
 
-    const closedMs = this.closedStart === null ? 0 : now - this.closedStart;
-    const level = getLevel(closedMs, thresholds);
+    const closedMs = Math.max(this.closedStart === null ? 0 : now - this.closedStart, this.sleepyMs);
+    const level = getLevel(this.sleepyMs, thresholds);
 
     this.lastSnapshot = {
       level,

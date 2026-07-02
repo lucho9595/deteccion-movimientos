@@ -273,6 +273,7 @@ systemMouseInput.addEventListener("change", () => {
 drowsinessModeInput.addEventListener("change", () => {
   if (drowsinessModeInput.checked) {
     setDetectorToggle("face", true);
+    drowsinessSensitivitySelect.value = "high";
     drowsinessTracker.reset();
   } else {
     drowsinessTracker.reset();
@@ -656,13 +657,13 @@ function playAlarmBeep(): void {
   const context = new AudioContextClass();
   const oscillator = context.createOscillator();
   const gain = context.createGain();
-  oscillator.type = "sine";
-  oscillator.frequency.value = 880;
-  gain.gain.value = 0.08;
+  oscillator.type = "square";
+  oscillator.frequency.value = 980;
+  gain.gain.value = 0.22;
   oscillator.connect(gain);
   gain.connect(context.destination);
   oscillator.start();
-  oscillator.stop(context.currentTime + 0.18);
+  oscillator.stop(context.currentTime + 0.32);
 }
 
 function formatDegrees(value: number | null): string {
