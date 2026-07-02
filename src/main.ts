@@ -1,4 +1,11 @@
 import "./styles.css";
+import {
+  createActivityEvent,
+  loadActivityEvents,
+  saveActivityEvents,
+  type ActivityEvent,
+  type ActivityKind,
+} from "./activity";
 import { EMPTY_ANALYSIS, analyzeBody, toCanvasPoint, type BodyAnalysis } from "./analysis";
 import { CommandGate, commandFromGesture, isPinching } from "./commands";
 import {
@@ -115,6 +122,13 @@ document.querySelector<HTMLDivElement>("#app")!.innerHTML = `
         <strong class="face-id-status" data-face-id-status>Sin registros</strong>
       </section>
 
+      <section class="analysis-panel activity-panel" aria-label="Historial">
+        <h2>Historial</h2>
+        <strong class="activity-summary" data-activity-summary>Sin eventos</strong>
+        <div class="activity-list" data-activity-list></div>
+        <button class="icon-action" type="button" data-clear-activity>Limpiar historial</button>
+      </section>
+
       <section class="analysis-panel" aria-label="Analisis corporal">
         <h2>Analisis corporal</h2>
         <div class="metric-grid">
@@ -216,6 +230,9 @@ const faceLastNameInput = document.querySelector<HTMLInputElement>("[data-face-l
 const registerFaceButton = document.querySelector<HTMLButtonElement>("[data-register-face]")!;
 const faceIdStatusNode = document.querySelector<HTMLElement>("[data-face-id-status]")!;
 const welcomeBanner = document.querySelector<HTMLDivElement>("[data-welcome-banner]")!;
+const activitySummaryNode = document.querySelector<HTMLElement>("[data-activity-summary]")!;
+const activityListNode = document.querySelector<HTMLDivElement>("[data-activity-list]")!;
+const clearActivityButton = document.querySelector<HTMLButtonElement>("[data-clear-activity]")!;
 const metricNodes = {
   leftElbow: document.querySelector<HTMLElement>('[data-metric="leftElbow"]')!,
   rightElbow: document.querySelector<HTMLElement>('[data-metric="rightElbow"]')!,
@@ -259,6 +276,12 @@ let faceProfiles: FaceProfile[] = loadFaceProfiles();
 let currentFaceMatch: FaceMatch | null = null;
 let lastWelcomeName = "";
 let welcomeVisibleUntil = 0;
+let activityEvents: ActivityEvent[] = loadActivityEvents();
+let lastLoggedFaceId = "";
+let lastLoggedObject = "";
+let lastLoggedObjectAt = 0;
+let lastLoggedSleepAt = 0;
+let lastLoggedRpsMatchId = 0;
 let alarmSilencedUntil = 0;
 let lastAlarmBeep = -Infinity;
 
@@ -269,6 +292,7 @@ const rpsGame = new RockPaperScissorsGame();
 const drowsinessTracker = new DrowsinessTracker();
 
 renderFaceId(0);
+renderActivity();
 
 document.querySelectorAll<HTMLInputElement>("[data-toggle]").forEach((input) => {
   input.addEventListener("change", () => {
@@ -334,9 +358,16 @@ registerFaceButton.addEventListener("click", () => {
     profile,
   ];
   saveFaceProfiles(faceProfiles);
+  addActivity("face", "Perfil registrado", `${profile.firstName} ${profile.lastName}`, profile);
   faceIdStatusNode.textContent = `Registrado: ${profile.firstName} ${profile.lastName}`;
   faceFirstNameInput.value = "";
   faceLastNameInput.value = "";
+});
+
+clearActivityButton.addEventListener("click", () => {
+  activityEvents = [];
+  saveActivityEvents(activityEvents);
+  renderActivity();
 });
 
 gameModeInput.addEventListener("change", () => {
@@ -537,6 +568,7 @@ function drawOverlay(): void {
     const now = performance.now();
     if (gameTypeSelect.value === "rps") {
       rpsGame.update(now, lastGesture as ReturnType<typeof detectHandGesture>, rpsDifficultySelect.value as RpsDifficulty);
+      logRpsMatchIfNeeded();
       rpsGame.draw(ctx, now);
     } else {
       const handPoint = toCanvasPoint(getActiveHand()?.[8], canvas.width, canvas.height);
@@ -568,6 +600,11 @@ function updateDrowsiness(now: number): void {
     lastAlarmBeep = now;
     playAlarmBeep();
   }
+
+  if (alarmActive && now - lastLoggedSleepAt > 10_000) {
+    lastLoggedSleepAt = now;
+    addActivity("sleep", "Alerta de somnolencia", snapshot.headDropped ? "Cabeceo detectado" : "Ojos cerrados");
+  }
 }
 
 function updateStats(now: number): void {
@@ -582,6 +619,7 @@ function updateStats(now: number): void {
   renderBodyAnalysis(bodyAnalysis);
   renderObjects();
   renderFaceId(now);
+  renderActivity();
 }
 
 function updateFaceId(now: number): void {
@@ -594,6 +632,11 @@ function updateFaceId(now: number): void {
   if (fullName !== lastWelcomeName || now > welcomeVisibleUntil) {
     lastWelcomeName = fullName;
     welcomeVisibleUntil = now + 3800;
+  }
+
+  if (currentFaceMatch.profile.id !== lastLoggedFaceId) {
+    lastLoggedFaceId = currentFaceMatch.profile.id;
+    addActivity("face", "Usuario reconocido", fullName, currentFaceMatch.profile);
   }
 }
 
@@ -712,6 +755,7 @@ function renderObjects(): void {
 
   const topObject = lastObjects[0];
   objectSummaryNode.textContent = `Veo: ${topObject.label}`;
+  logObjectIfNeeded(topObject.label);
   objectListNode.innerHTML = lastObjects
     .map(
       (object) => `
@@ -722,6 +766,17 @@ function renderObjects(): void {
       `,
     )
     .join("");
+}
+
+function logObjectIfNeeded(label: string): void {
+  const now = performance.now();
+  if (label === lastLoggedObject && now - lastLoggedObjectAt < 12_000) {
+    return;
+  }
+
+  lastLoggedObject = label;
+  lastLoggedObjectAt = now;
+  addActivity("object", "Objeto detectado", label);
 }
 
 function renderFaceId(now: number): void {
@@ -743,6 +798,63 @@ function renderFaceId(now: number): void {
   } else {
     welcomeBanner.classList.remove("is-visible");
   }
+}
+
+function renderActivity(): void {
+  activitySummaryNode.textContent = activityEvents.length === 0
+    ? "Sin eventos"
+    : `${activityEvents.length} evento(s) guardado(s)`;
+  activityListNode.innerHTML = activityEvents
+    .slice(0, 8)
+    .map(
+      (event) => `
+        <article class="activity-item" data-kind="${event.kind}">
+          <b>${event.title}</b>
+          <span>${event.detail}</span>
+          <time>${formatEventTime(event.createdAt)}</time>
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function addActivity(
+  kind: ActivityKind,
+  title: string,
+  detail: string,
+  profile = currentFaceMatch?.profile,
+): void {
+  const event = createActivityEvent({
+    kind,
+    title,
+    detail,
+    profileId: profile?.id,
+    profileName: profile ? `${profile.firstName} ${profile.lastName}` : undefined,
+  });
+  activityEvents = [event, ...activityEvents].slice(0, 80);
+  saveActivityEvents(activityEvents);
+  renderActivity();
+}
+
+function logRpsMatchIfNeeded(): void {
+  const snapshot = rpsGame.snapshot;
+  if (snapshot.phase !== "matchOver" || snapshot.completedMatchId === lastLoggedRpsMatchId) {
+    return;
+  }
+
+  lastLoggedRpsMatchId = snapshot.completedMatchId;
+  addActivity(
+    "game",
+    snapshot.matchWinner === "player" ? "Ganaste piedra papel tijera" : "Perdiste piedra papel tijera",
+    `Final ${snapshot.playerScore} - ${snapshot.aiScore}`,
+  );
+}
+
+function formatEventTime(timestamp: number): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(timestamp);
 }
 
 function toObjectBox(detection: {
@@ -885,9 +997,14 @@ function resetDetections(): void {
   currentFaceMatch = null;
   lastWelcomeName = "";
   welcomeVisibleUntil = 0;
+  lastLoggedFaceId = "";
+  lastLoggedObject = "";
+  lastLoggedObjectAt = 0;
+  lastLoggedSleepAt = 0;
   renderBodyAnalysis(EMPTY_ANALYSIS);
   renderObjects();
   renderFaceId(0);
+  renderActivity();
 }
 
 function updateCanvasSize(): void {

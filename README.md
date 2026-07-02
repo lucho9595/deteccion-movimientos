@@ -7,6 +7,7 @@ App de vision por computadora en tiempo real. Detecta manos, cara, cuerpo, objet
 - Deteccion de manos con articulaciones, circulos y conexiones entre dedos.
 - Deteccion de cara con malla facial.
 - Face ID local para registrar nombre/apellido y saludar cuando reconoce la cara.
+- Perfiles e historial local de actividad por usuario reconocido.
 - Deteccion de cuerpo y panel de analisis corporal.
 - Deteccion de objetos con cajas sobre la camara y panel de resultados.
 - Traduccion de objetos comunes al español, incluyendo `cup` como `Mate / taza`.
@@ -99,6 +100,18 @@ Completar `Nombre` y `Apellido`, mostrar la cara a la camara y presionar `Regist
 La app guarda una huella de landmarks faciales en el navegador. Cuando vuelve a detectar una cara registrada, muestra `Bienvenido` con el nombre y apellido.
 
 Los datos quedan en `localStorage`; no se suben a ningun servidor. Es reconocimiento practico para la app, no autenticacion segura.
+
+### Historial
+
+La app guarda eventos locales como:
+
+- Usuario reconocido.
+- Perfil registrado.
+- Objeto detectado.
+- Alerta de somnolencia.
+- Resultado de piedra papel tijera.
+
+El historial se asocia al usuario reconocido cuando hay Face ID activo y se puede limpiar desde la interfaz.
 
 ### Analisis corporal
 

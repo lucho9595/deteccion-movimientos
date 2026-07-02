@@ -155,6 +155,7 @@ export type RpsSnapshot = {
   nextRoundAt: number;
   phase: "countdown" | "reveal" | "matchOver";
   matchWinner: "player" | "ai" | null;
+  completedMatchId: number;
 };
 
 const MOVES: RpsMove[] = ["Piedra", "Papel", "Tijera"];
@@ -184,6 +185,7 @@ export class RockPaperScissorsGame {
   private matchWinnerValue: "player" | "ai" | null = null;
   private matchOverUntilValue = 0;
   private confetti: ConfettiPiece[] = [];
+  private completedMatchIdValue = 0;
 
   get snapshot(): RpsSnapshot {
     return {
@@ -197,6 +199,7 @@ export class RockPaperScissorsGame {
       nextRoundAt: this.resolveAtValue,
       phase: this.phaseValue,
       matchWinner: this.matchWinnerValue,
+      completedMatchId: this.completedMatchIdValue,
     };
   }
 
@@ -268,6 +271,7 @@ export class RockPaperScissorsGame {
     this.phaseValue = "reveal";
     if (this.playerScoreValue >= WINNING_SCORE || this.aiScoreValue >= WINNING_SCORE) {
       this.matchWinnerValue = this.playerScoreValue >= WINNING_SCORE ? "player" : "ai";
+      this.completedMatchIdValue += 1;
       this.phaseValue = "matchOver";
       this.matchOverUntilValue = now + 4200;
       this.resultValue = this.matchWinnerValue === "player"
