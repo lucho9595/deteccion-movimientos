@@ -18,6 +18,7 @@ App de vision por computadora en tiempo real. Detecta manos, cara, cuerpo, objet
 - Mouse virtual nativo mediante script Python.
 - Captura de imagen desde la camara.
 - Modos de rendimiento: rapido, balanceado y preciso.
+- Interfaz visual renovada con paneles tipo glass, HUD sobre camara y estados destacados.
 
 ## Requisitos
 
